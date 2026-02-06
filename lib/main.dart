@@ -7,9 +7,9 @@ import 'package:timezone/data/latest.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
 import 'package:cron_parser/cron_parser.dart' as cron;
 import 'package:toml/toml.dart';
-import 'package:dart_jsonwebtoken/dart_jsonwebtoken.dart';
 import 'package:yaml/yaml.dart';
 import 'package:json2yaml/json2yaml.dart';
+import 'package:crypto/crypto.dart';
 
 void main() {
   tz.initializeTimeZones();
@@ -972,16 +972,13 @@ class _JwtToolsPageState extends State<JwtToolsPage> {
       try {
         final parts = _tokenCtrl.text.split('.');
         if (parts.length < 2) throw 'Token must have at least 2 parts';
-        _header = _prettyDecode(parts[0]);
-        _payload = _prettyDecode(parts[1]);
+        final headerJson = _jsonFromSegment(parts[0]);
+        final payloadJson = _jsonFromSegment(parts[1]);
+        _header = const JsonEncoder.withIndent('  ').convert(headerJson);
+        _payload = const JsonEncoder.withIndent('  ').convert(payloadJson);
         _status = 'Decoded';
         if (_secretCtrl.text.isNotEmpty && parts.length == 3) {
-          try {
-            JWT.verify(_tokenCtrl.text, SecretKey(_secretCtrl.text));
-            _status = 'Signature verified (HS*)';
-          } catch (e) {
-            _status = 'Invalid signature: $e';
-          }
+          _status = _verifyHs(parts, headerJson, _secretCtrl.text);
         }
       } catch (e) {
         _status = 'Error: $e';
@@ -990,13 +987,34 @@ class _JwtToolsPageState extends State<JwtToolsPage> {
     });
   }
 
-  String _prettyDecode(String segment) {
+  Map<String, dynamic> _jsonFromSegment(String segment) {
     final normalized = base64Url.normalize(segment);
     final decoded = utf8.decode(base64Url.decode(normalized));
     final obj = jsonDecode(decoded);
-    return const JsonEncoder.withIndent('  ').convert(obj);
+    return obj is Map<String, dynamic>
+        ? obj
+        : {'data': obj}; // wrap primitives for display
   }
 
+  String _verifyHs(List<String> parts, Map<String, dynamic> header, String secret) {
+    final alg = (header['alg'] ?? 'HS256') as String;
+    Hmac? hmac;
+    if (alg == 'HS256') hmac = Hmac(sha256, utf8.encode(secret));
+    if (alg == 'HS384') hmac = Hmac(sha384, utf8.encode(secret));
+    if (alg == 'HS512') hmac = Hmac(sha512, utf8.encode(secret));
+    if (hmac == null) return 'Unsupported alg for inline verify: $alg';
+
+    final signingInput = '${parts[0]}.${parts[1]}';
+    final digest = hmac.convert(utf8.encode(signingInput));
+    final expectedSig = _base64UrlNoPad(digest.bytes);
+    final providedSig = _normalizeSig(parts[2]);
+    return expectedSig == providedSig ? 'Signature verified ($alg)' : 'Invalid signature';
+  }
+
+  String _base64UrlNoPad(List<int> bytes) =>
+      base64Url.encode(bytes).replaceAll('=', '');
+
+  String _normalizeSig(String sig) => sig.replaceAll('=', '');
   @override
   Widget build(BuildContext context) {
     return Scaffold(
