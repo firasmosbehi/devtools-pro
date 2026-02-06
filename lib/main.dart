@@ -1,9 +1,15 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:timezone/data/latest.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
 import 'package:cron_parser/cron_parser.dart' as cron;
+import 'package:toml/toml.dart';
+import 'package:dart_jsonwebtoken/dart_jsonwebtoken.dart';
+import 'package:yaml/yaml.dart';
+import 'package:json2yaml/json2yaml.dart';
 
 void main() {
   tz.initializeTimeZones();
@@ -42,9 +48,9 @@ class _HomeShellState extends State<HomeShell> {
     UtilitiesHomePage(onSelectUtility: _goToUtility),
     const RegexBuilderPage(),
     const CronDesignerPage(),
-    const ComingSoonPage(title: 'CIDR Helper'),
-    const ComingSoonPage(title: 'Converters'),
-    const ComingSoonPage(title: 'JWT/JWS Tools'),
+    const CidrHelperPage(),
+    const ConverterPage(),
+    const JwtToolsPage(),
   ];
 
   void _goToUtility(String title) {
@@ -629,6 +635,409 @@ class _LabeledField extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// CIDR calculator MVP (Issue #4)
+class CidrHelperPage extends StatefulWidget {
+  const CidrHelperPage({super.key});
+
+  @override
+  State<CidrHelperPage> createState() => _CidrHelperPageState();
+}
+
+class _CidrHelperPageState extends State<CidrHelperPage> {
+  final _cidrCtrl = TextEditingController(text: '192.168.1.0/24');
+  String? _error;
+  _CidrResult? _result;
+
+  @override
+  void initState() {
+    super.initState();
+    _compute();
+  }
+
+  void _compute() {
+    setState(() {
+      try {
+        _result = _computeCidr(_cidrCtrl.text);
+        _error = null;
+      } catch (e) {
+        _error = 'Invalid CIDR: $e';
+        _result = null;
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('CIDR Helper'),
+        actions: [
+          IconButton(icon: const Icon(Icons.refresh), onPressed: _compute),
+        ],
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _LabeledField(
+              label: 'CIDR',
+              controller: _cidrCtrl,
+              hint: 'e.g. 10.0.0.0/16',
+              monospace: true,
+            ),
+            const SizedBox(height: 12),
+            ElevatedButton.icon(
+              onPressed: _compute,
+              icon: const Icon(Icons.calculate),
+              label: const Text('Calculate'),
+            ),
+            const SizedBox(height: 12),
+            if (_error != null)
+              Text(
+                _error!,
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              ),
+            if (_result != null) ...[
+              _StatRow(label: 'Network', value: _result!.network),
+              _StatRow(label: 'Broadcast', value: _result!.broadcast),
+              _StatRow(label: 'Prefix', value: '/${_result!.prefix}'),
+              _StatRow(
+                label: 'Total hosts',
+                value: _result!.hostCount.toString(),
+              ),
+              _StatRow(
+                label: 'Usable range',
+                value: '${_result!.firstUsable} – ${_result!.lastUsable}',
+              ),
+              const SizedBox(height: 10),
+              Text(
+                'First 5 addresses',
+                style: Theme.of(context).textTheme.labelLarge,
+              ),
+              ..._result!.sample.map((ip) => Text(ip)),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _StatRow extends StatelessWidget {
+  const _StatRow({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 140,
+            child: Text(label, style: Theme.of(context).textTheme.bodyMedium),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                fontFeatures: const [FontFeature.tabularFigures()],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CidrResult {
+  _CidrResult({
+    required this.network,
+    required this.broadcast,
+    required this.prefix,
+    required this.hostCount,
+    required this.firstUsable,
+    required this.lastUsable,
+    required this.sample,
+  });
+
+  final String network;
+  final String broadcast;
+  final int prefix;
+  final BigInt hostCount;
+  final String firstUsable;
+  final String lastUsable;
+  final List<String> sample;
+}
+
+_CidrResult _computeCidr(String cidr) {
+  final parts = cidr.split('/');
+  if (parts.length != 2) throw 'Use format A.B.C.D/nn';
+  final ip = parts[0].trim();
+  final prefix = int.tryParse(parts[1]) ?? -1;
+  if (prefix < 0 || prefix > 32) throw 'Prefix must be 0-32';
+  final baseInt = _ipv4ToInt(ip);
+  final hostBits = 32 - prefix;
+  final mask = hostBits == 0
+      ? (BigInt.one << 32) - BigInt.one
+      : (BigInt.one << hostBits) - BigInt.one;
+  final networkInt = baseInt & ~mask;
+  final broadcastInt = networkInt | mask;
+  final hostCount = BigInt.one << hostBits;
+  final firstUsable = prefix >= 31 ? networkInt : networkInt + BigInt.one;
+  final lastUsable = prefix >= 31 ? broadcastInt : broadcastInt - BigInt.one;
+  final sample = <String>[];
+  for (var i = 0; i < 5; i++) {
+    final candidate = networkInt + BigInt.from(i);
+    if (candidate <= broadcastInt) sample.add(_intToIpv4(candidate));
+  }
+  return _CidrResult(
+    network: _intToIpv4(networkInt),
+    broadcast: _intToIpv4(broadcastInt),
+    prefix: prefix,
+    hostCount: hostCount,
+    firstUsable: _intToIpv4(firstUsable),
+    lastUsable: _intToIpv4(lastUsable),
+    sample: sample,
+  );
+}
+
+BigInt _ipv4ToInt(String ip) {
+  final octets = ip.split('.').map(int.tryParse).toList();
+  final parsed = octets.whereType<int>().toList();
+  if (parsed.length != 4 || parsed.any((o) => o < 0 || o > 255)) {
+    throw 'Invalid IPv4 address';
+  }
+  return BigInt.from(parsed[0] << 24 | parsed[1] << 16 | parsed[2] << 8 | parsed[3]);
+}
+
+String _intToIpv4(BigInt value) {
+  final v = value.toInt();
+  return '${(v >> 24) & 255}.${(v >> 16) & 255}.${(v >> 8) & 255}.${v & 255}';
+}
+
+/// Data converters (Issue #6)
+class ConverterPage extends StatefulWidget {
+  const ConverterPage({super.key});
+
+  @override
+  State<ConverterPage> createState() => _ConverterPageState();
+}
+
+class _ConverterPageState extends State<ConverterPage> {
+  final _inputCtrl =
+      TextEditingController(text: '{"hello": "world", "items": [1,2,3]}');
+  String _source = 'json';
+  String? _error;
+  String _jsonOut = '';
+  String _yamlOut = '';
+  String _tomlOut = '';
+
+  void _convert() {
+    setState(() {
+      try {
+        final parsed = _parseInput(_inputCtrl.text, _source);
+        _jsonOut = const JsonEncoder.withIndent('  ').convert(parsed);
+        _yamlOut = json2yaml(parsed);
+        final mapForToml =
+            parsed is Map ? Map<String, Object?>.from(parsed) : {'root': parsed};
+        _tomlOut = TomlDocument.fromMap(mapForToml).toString();
+        _error = null;
+      } catch (e) {
+        _error = 'Conversion failed: $e';
+        _jsonOut = _yamlOut = _tomlOut = '';
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Data Converters'),
+        actions: [
+          IconButton(onPressed: _convert, icon: const Icon(Icons.play_arrow)),
+        ],
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(16),
+        child: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Text('Source format:'),
+                  const SizedBox(width: 10),
+                  DropdownButton<String>(
+                    value: _source,
+                    items: const [
+                      DropdownMenuItem(value: 'json', child: Text('JSON')),
+                      DropdownMenuItem(value: 'yaml', child: Text('YAML')),
+                      DropdownMenuItem(value: 'toml', child: Text('TOML')),
+                    ],
+                    onChanged: (v) => setState(() => _source = v ?? 'json'),
+                  ),
+                ],
+              ),
+              _LabeledField(
+                label: 'Input',
+                controller: _inputCtrl,
+                maxLines: 6,
+                monospace: true,
+              ),
+              const SizedBox(height: 12),
+              ElevatedButton(onPressed: _convert, child: const Text('Convert')),
+              const SizedBox(height: 12),
+              if (_error != null)
+                Text(
+                  _error!,
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                ),
+              _OutputBlock(title: 'JSON', content: _jsonOut),
+              _OutputBlock(title: 'YAML', content: _yamlOut),
+              _OutputBlock(title: 'TOML', content: _tomlOut),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+dynamic _parseInput(String text, String format) {
+  switch (format) {
+    case 'json':
+      return jsonDecode(text);
+    case 'yaml':
+      final yaml = loadYaml(text);
+      return jsonDecode(jsonEncode(yaml));
+    case 'toml':
+      return TomlDocument.parse(text).toMap();
+    default:
+      throw 'Unsupported format';
+  }
+}
+
+class _OutputBlock extends StatelessWidget {
+  const _OutputBlock({required this.title, required this.content});
+
+  final String title;
+  final String content;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      margin: const EdgeInsets.symmetric(vertical: 8),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(title, style: Theme.of(context).textTheme.labelLarge),
+            const SizedBox(height: 6),
+            SelectableText(content.isEmpty ? '—' : content),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// JWT/JWS decode & verify (Issue #5)
+class JwtToolsPage extends StatefulWidget {
+  const JwtToolsPage({super.key});
+
+  @override
+  State<JwtToolsPage> createState() => _JwtToolsPageState();
+}
+
+class _JwtToolsPageState extends State<JwtToolsPage> {
+  final _tokenCtrl = TextEditingController(text: 'header.payload.signature');
+  final _secretCtrl = TextEditingController();
+  String _header = '';
+  String _payload = '';
+  String _status = '';
+
+  void _decode() {
+    setState(() {
+      try {
+        final parts = _tokenCtrl.text.split('.');
+        if (parts.length < 2) throw 'Token must have at least 2 parts';
+        _header = _prettyDecode(parts[0]);
+        _payload = _prettyDecode(parts[1]);
+        _status = 'Decoded';
+        if (_secretCtrl.text.isNotEmpty && parts.length == 3) {
+          try {
+            JWT.verify(_tokenCtrl.text, SecretKey(_secretCtrl.text));
+            _status = 'Signature verified (HS*)';
+          } catch (e) {
+            _status = 'Invalid signature: $e';
+          }
+        }
+      } catch (e) {
+        _status = 'Error: $e';
+        _header = _payload = '';
+      }
+    });
+  }
+
+  String _prettyDecode(String segment) {
+    final normalized = base64Url.normalize(segment);
+    final decoded = utf8.decode(base64Url.decode(normalized));
+    final obj = jsonDecode(decoded);
+    return const JsonEncoder.withIndent('  ').convert(obj);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('JWT/JWS Tools'),
+        actions: [
+          IconButton(onPressed: _decode, icon: const Icon(Icons.play_arrow)),
+        ],
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(16),
+        child: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _LabeledField(
+                label: 'JWT / JWS',
+                controller: _tokenCtrl,
+                maxLines: 3,
+                monospace: true,
+              ),
+              const SizedBox(height: 8),
+              _LabeledField(
+                label: 'Secret (HS256/384/512)',
+                controller: _secretCtrl,
+                hint: 'Optional: for verification',
+                monospace: true,
+              ),
+              const SizedBox(height: 12),
+              ElevatedButton(
+                onPressed: _decode,
+                child: const Text('Decode / Verify'),
+              ),
+              const SizedBox(height: 12),
+              Text('Status: $_status'),
+              _OutputBlock(title: 'Header', content: _header),
+              _OutputBlock(title: 'Payload', content: _payload),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
