@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:timezone/data/latest.dart' as tz;
@@ -442,6 +443,31 @@ class _RegexBuilderPageState extends State<RegexBuilderPage> {
                             'Date (YYYY-MM-DD)',
                             sample: '2026-02-06',
                           ),
+                          _regexPresetButton(
+                            r"^[a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$",
+                            'UUID v1-5',
+                            sample: '123e4567-e89b-12d3-a456-426614174000',
+                          ),
+                          _regexPresetButton(
+                            r"^(?:\d{1,3}\.){3}\d{1,3}$",
+                            'IPv4',
+                            sample: '192.168.10.5',
+                          ),
+                          _regexPresetButton(
+                            r"^[0-9a-fA-F:]+$",
+                            'IPv6 (loose)',
+                            sample: '2001:0db8:85a3:0000:0000:8a2e:0370:7334',
+                          ),
+                          _regexPresetButton(
+                            r"^[a-z0-9]+(?:-[a-z0-9]+)*$",
+                            'Slug',
+                            sample: 'dev-tools-pro',
+                          ),
+                          _regexPresetButton(
+                            r"^\+?[0-9 ()-]{7,}$",
+                            'Phone (basic)',
+                            sample: '+1 (415) 555-0101',
+                          ),
                         ],
                       ),
                       const SizedBox(height: 12),
@@ -486,6 +512,32 @@ class _RegexBuilderPageState extends State<RegexBuilderPage> {
                         ],
                       ),
                       const SizedBox(height: 10),
+                      Text(
+                        'Building blocks',
+                        style: Theme.of(context).textTheme.labelLarge,
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          _snippetButton('^ start', '^'),
+                          _snippetButton(r'$ end', r'$'),
+                          _snippetButton(r'\b word boundary', r'\b'),
+                          _snippetButton(r'\d digits', r'\d'),
+                          _snippetButton(r'\w word chars', r'\w'),
+                          _snippetButton(r'\s whitespace', r'\s'),
+                          _snippetButton('.', '.'),
+                          _snippetButton('*', '*'),
+                          _snippetButton('+', '+'),
+                          _snippetButton('?', '?'),
+                          _snippetButton('{n,m}', '{1,3}'),
+                          _snippetButton('[abc]', '[abc]'),
+                          _snippetButton('(group)', '(...)'),
+                          _snippetButton('(?:non-capt)', '(?:...)'),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
                       _LabeledField(
                         label: 'Test input',
                         controller: _testCtrl,
@@ -523,6 +575,19 @@ class _RegexBuilderPageState extends State<RegexBuilderPage> {
                             onPressed: _run,
                             icon: const Icon(Icons.play_arrow),
                             label: const Text('Run'),
+                          ),
+                          const SizedBox(width: 12),
+                          OutlinedButton.icon(
+                            onPressed: () {
+                              Clipboard.setData(
+                                ClipboardData(text: _patternCtrl.text),
+                              );
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('Pattern copied')),
+                              );
+                            },
+                            icon: const Icon(Icons.copy),
+                            label: const Text('Copy pattern'),
                           ),
                           const SizedBox(width: 12),
                           FilterChip(
@@ -602,6 +667,7 @@ class _RegexBuilderPageState extends State<RegexBuilderPage> {
       onPressed: () => setState(() {
         _patternCtrl.text = pattern;
         if (sample != null) _testCtrl.text = sample;
+        if (_autoRun) _run();
       }),
       child: Text(label),
     );
@@ -616,6 +682,29 @@ class _RegexBuilderPageState extends State<RegexBuilderPage> {
         if (_autoRun) _run();
       }),
     );
+  }
+
+  Widget _snippetButton(String label, String snippet) {
+    return OutlinedButton(
+      onPressed: () => _insertSnippet(snippet),
+      child: Text(label),
+    );
+  }
+
+  void _insertSnippet(String snippet) {
+    final selection = _patternCtrl.selection;
+    final text = _patternCtrl.text;
+    final newText = selection.isValid
+        ? text.replaceRange(selection.start, selection.end, snippet)
+        : text + snippet;
+    final cursor = selection.isValid
+        ? selection.start + snippet.length
+        : newText.length;
+    _patternCtrl.value = TextEditingValue(
+      text: newText,
+      selection: TextSelection.collapsed(offset: cursor),
+    );
+    if (_autoRun) _run();
   }
 }
 
