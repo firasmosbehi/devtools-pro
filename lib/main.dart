@@ -419,58 +419,61 @@ class _RegexBuilderPageState extends State<RegexBuilderPage> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
+                      const _SectionHeader(
+                        label: 'Presets',
+                        description:
+                            'Tap to load a common pattern and sample text.',
+                      ),
+                      Column(
                         children: [
-                          _regexPresetButton(
-                            r"^https?://[\w.-]+",
+                          _presetTile(
                             'URL',
+                            r"^https?://[\w.-]+",
                             sample: 'https://example.dev/path',
                           ),
-                          _regexPresetButton(
-                            r"^[\w.%+-]+@[\w.-]+\.[A-Za-z]{2,}$",
+                          _presetTile(
                             'Email',
+                            r"^[\w.%+-]+@[\w.-]+\.[A-Za-z]{2,}$",
                             sample: 'dev@example.com',
                           ),
-                          _regexPresetButton(
-                            r"^#[0-9A-Fa-f]{6}$",
+                          _presetTile(
                             'Hex color',
+                            r"^#[0-9A-Fa-f]{6}$",
                             sample: '#FF00AA',
                           ),
-                          _regexPresetButton(
-                            r"^\d{4}-\d{2}-\d{2}$",
+                          _presetTile(
                             'Date (YYYY-MM-DD)',
+                            r"^\d{4}-\d{2}-\d{2}$",
                             sample: '2026-02-06',
                           ),
-                          _regexPresetButton(
-                            r"^[a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$",
+                          _presetTile(
                             'UUID v1-5',
+                            r"^[a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$",
                             sample: '123e4567-e89b-12d3-a456-426614174000',
                           ),
-                          _regexPresetButton(
-                            r"^(?:\d{1,3}\.){3}\d{1,3}$",
+                          _presetTile(
                             'IPv4',
+                            r"^(?:\d{1,3}\.){3}\d{1,3}$",
                             sample: '192.168.10.5',
                           ),
-                          _regexPresetButton(
-                            r"^[0-9a-fA-F:]+$",
+                          _presetTile(
                             'IPv6 (loose)',
+                            r"^[0-9a-fA-F:]+$",
                             sample: '2001:0db8:85a3:0000:0000:8a2e:0370:7334',
                           ),
-                          _regexPresetButton(
-                            r"^[a-z0-9]+(?:-[a-z0-9]+)*$",
+                          _presetTile(
                             'Slug',
+                            r"^[a-z0-9]+(?:-[a-z0-9]+)*$",
                             sample: 'dev-tools-pro',
                           ),
-                          _regexPresetButton(
-                            r"^\+?[0-9 ()-]{7,}$",
+                          _presetTile(
                             'Phone (basic)',
+                            r"^\+?[0-9 ()-]{7,}$",
                             sample: '+1 (415) 555-0101',
                           ),
                         ],
                       ),
-                      const SizedBox(height: 12),
+                      const SizedBox(height: 16),
                       Text(
                         'Write a regex (Dart RegExp syntax). We run it against the test text below and highlight matches.',
                         style: Theme.of(context).textTheme.bodyMedium,
@@ -662,17 +665,6 @@ class _RegexBuilderPageState extends State<RegexBuilderPage> {
     );
   }
 
-  Widget _regexPresetButton(String pattern, String label, {String? sample}) {
-    return OutlinedButton(
-      onPressed: () => setState(() {
-        _patternCtrl.text = pattern;
-        if (sample != null) _testCtrl.text = sample;
-        if (_autoRun) _run();
-      }),
-      child: Text(label),
-    );
-  }
-
   Widget _sampleButton(String label, String text) {
     return OutlinedButton.icon(
       icon: const Icon(Icons.article_outlined, size: 16),
@@ -681,6 +673,23 @@ class _RegexBuilderPageState extends State<RegexBuilderPage> {
         _testCtrl.text = text;
         if (_autoRun) _run();
       }),
+    );
+  }
+
+  Widget _presetTile(String title, String pattern, {String? sample}) {
+    return Card(
+      margin: const EdgeInsets.symmetric(vertical: 4),
+      child: ListTile(
+        dense: true,
+        title: Text(title),
+        subtitle: Text(pattern),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: () => setState(() {
+          _patternCtrl.text = pattern;
+          if (sample != null) _testCtrl.text = sample;
+          if (_autoRun) _run();
+        }),
+      ),
     );
   }
 
@@ -705,6 +714,28 @@ class _RegexBuilderPageState extends State<RegexBuilderPage> {
       selection: TextSelection.collapsed(offset: cursor),
     );
     if (_autoRun) _run();
+  }
+}
+
+class _SectionHeader extends StatelessWidget {
+  const _SectionHeader({required this.label, required this.description});
+
+  final String label;
+  final String description;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 4),
+          Text(description, style: Theme.of(context).textTheme.bodyMedium),
+        ],
+      ),
+    );
   }
 }
 
