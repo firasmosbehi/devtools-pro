@@ -360,6 +360,26 @@ class _RegexBuilderPageState extends State<RegexBuilderPage> {
   bool _unicode = true;
   String? _error;
   List<RegExpMatch>? _matches;
+  bool _autoRun = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _patternCtrl.addListener(_maybeRun);
+    _testCtrl.addListener(_maybeRun);
+    _run();
+  }
+
+  @override
+  void dispose() {
+    _patternCtrl.dispose();
+    _testCtrl.dispose();
+    super.dispose();
+  }
+
+  void _maybeRun() {
+    if (_autoRun) _run();
+  }
 
   void _run() {
     setState(() {
@@ -385,16 +405,7 @@ class _RegexBuilderPageState extends State<RegexBuilderPage> {
     final colorScheme = Theme.of(context).colorScheme;
     final bottomInset = MediaQuery.of(context).viewInsets.bottom;
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Regex Builder'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.play_circle_fill),
-            onPressed: _run,
-            tooltip: 'Run',
-          ),
-        ],
-      ),
+      appBar: AppBar(title: const Text('Regex Builder')),
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(16),
@@ -432,6 +443,11 @@ class _RegexBuilderPageState extends State<RegexBuilderPage> {
                             sample: '2026-02-06',
                           ),
                         ],
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        'Write a regex (Dart RegExp syntax). We run it against the test text below and highlight matches.',
+                        style: Theme.of(context).textTheme.bodyMedium,
                       ),
                       const SizedBox(height: 12),
                       _LabeledField(
@@ -473,8 +489,32 @@ class _RegexBuilderPageState extends State<RegexBuilderPage> {
                       _LabeledField(
                         label: 'Test input',
                         controller: _testCtrl,
-                        hint: 'Paste text to test',
-                        maxLines: 6,
+                        hint:
+                            'This is the text your regex will be tested against.',
+                        maxLines: 8,
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          _sampleButton(
+                            'Emails',
+                            'dev@example.com\nops@acme.io',
+                          ),
+                          _sampleButton(
+                            'URLs',
+                            'https://api.dev.com/v1\nhttp://localhost:8080',
+                          ),
+                          _sampleButton(
+                            'JSON',
+                            '{"user":"dev","id":42,"roles":["admin","dev"]}',
+                          ),
+                          _sampleButton(
+                            'Logs',
+                            '[INFO] ready\n[WARN] slow query\n[ERROR] panic',
+                          ),
+                        ],
                       ),
                       const SizedBox(height: 12),
                       Row(
@@ -483,6 +523,12 @@ class _RegexBuilderPageState extends State<RegexBuilderPage> {
                             onPressed: _run,
                             icon: const Icon(Icons.play_arrow),
                             label: const Text('Run'),
+                          ),
+                          const SizedBox(width: 12),
+                          FilterChip(
+                            label: const Text('Auto-run'),
+                            selected: _autoRun,
+                            onSelected: (v) => setState(() => _autoRun = v),
                           ),
                           const SizedBox(width: 12),
                           if (_matches != null)
@@ -560,6 +606,17 @@ class _RegexBuilderPageState extends State<RegexBuilderPage> {
       child: Text(label),
     );
   }
+
+  Widget _sampleButton(String label, String text) {
+    return OutlinedButton.icon(
+      icon: const Icon(Icons.article_outlined, size: 16),
+      label: Text(label),
+      onPressed: () => setState(() {
+        _testCtrl.text = text;
+        if (_autoRun) _run();
+      }),
+    );
+  }
 }
 
 class _HighlightedText extends StatelessWidget {
@@ -576,6 +633,7 @@ class _HighlightedText extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (matches.isEmpty) return Text(text);
+    if (text.isEmpty) return const Text('No test text provided.');
     final spans = <TextSpan>[];
     var cursor = 0;
     for (final m in matches) {
