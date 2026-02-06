@@ -356,6 +356,8 @@ class _RegexBuilderPageState extends State<RegexBuilderPage> {
   final _testCtrl = TextEditingController(text: 'dev@example.com');
   bool _caseSensitive = true;
   bool _multiLine = false;
+  bool _dotAll = false;
+  bool _unicode = true;
   String? _error;
   List<RegExpMatch>? _matches;
 
@@ -366,6 +368,8 @@ class _RegexBuilderPageState extends State<RegexBuilderPage> {
           _patternCtrl.text,
           caseSensitive: _caseSensitive,
           multiLine: _multiLine,
+          dotAll: _dotAll,
+          unicode: _unicode,
         );
         _matches = regex.allMatches(_testCtrl.text).toList();
         _error = _matches!.isEmpty ? 'No matches found' : null;
@@ -379,6 +383,7 @@ class _RegexBuilderPageState extends State<RegexBuilderPage> {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
     return Scaffold(
       appBar: AppBar(
         title: const Text('Regex Builder'),
@@ -390,95 +395,210 @@ class _RegexBuilderPageState extends State<RegexBuilderPage> {
           ),
         ],
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Wrap(
-              spacing: 12,
-              runSpacing: 8,
-              children: [
-                _regexPresetButton(r"^https?://[\w.-]+", 'URL'),
-                _regexPresetButton(
-                  r"^[\w.%+-]+@[\w.-]+\\.[A-Za-z]{2,}$",
-                  'Email',
-                ),
-                _regexPresetButton(r"^#[0-9A-Fa-f]{6}$", 'Hex color'),
-                _regexPresetButton(r"^\d{4}-\d{2}-\d{2}$", 'Date (YYYY-MM-DD)'),
-              ],
-            ),
-            const SizedBox(height: 12),
-            _LabeledField(
-              label: 'Pattern',
-              controller: _patternCtrl,
-              hint: 'Enter a regex pattern',
-              monospace: true,
-              maxLines: 3,
-            ),
-            const SizedBox(height: 10),
-            Row(
-              children: [
-                FilterChip(
-                  label: const Text('Case-sensitive'),
-                  selected: _caseSensitive,
-                  onSelected: (v) => setState(() => _caseSensitive = v),
-                ),
-                const SizedBox(width: 10),
-                FilterChip(
-                  label: const Text('Multiline'),
-                  selected: _multiLine,
-                  onSelected: (v) => setState(() => _multiLine = v),
-                ),
-              ],
-            ),
-            const SizedBox(height: 10),
-            _LabeledField(
-              label: 'Test input',
-              controller: _testCtrl,
-              hint: 'Paste text to test',
-              maxLines: 4,
-            ),
-            const SizedBox(height: 12),
-            ElevatedButton.icon(
-              onPressed: _run,
-              icon: const Icon(Icons.play_arrow),
-              label: const Text('Run'),
-            ),
-            const SizedBox(height: 12),
-            if (_error != null)
-              Text(_error!, style: TextStyle(color: colorScheme.error)),
-            if (_matches != null && _matches!.isNotEmpty)
-              Expanded(
-                child: ListView.builder(
-                  itemCount: _matches!.length,
-                  itemBuilder: (context, index) {
-                    final m = _matches![index];
-                    final groups = List.generate(
-                      m.groupCount + 1,
-                      (i) => m.group(i) ?? '',
-                    );
-                    return Card(
-                      margin: const EdgeInsets.symmetric(vertical: 6),
-                      child: ListTile(
-                        title: Text('Match ${index + 1}: "${m.group(0)}"'),
-                        subtitle: Text('Groups: ${groups.join(', ')}'),
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              return SingleChildScrollView(
+                padding: EdgeInsets.only(bottom: bottomInset + 24),
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          _regexPresetButton(
+                            r"^https?://[\w.-]+",
+                            'URL',
+                            sample: 'https://example.dev/path',
+                          ),
+                          _regexPresetButton(
+                            r"^[\w.%+-]+@[\w.-]+\.[A-Za-z]{2,}$",
+                            'Email',
+                            sample: 'dev@example.com',
+                          ),
+                          _regexPresetButton(
+                            r"^#[0-9A-Fa-f]{6}$",
+                            'Hex color',
+                            sample: '#FF00AA',
+                          ),
+                          _regexPresetButton(
+                            r"^\d{4}-\d{2}-\d{2}$",
+                            'Date (YYYY-MM-DD)',
+                            sample: '2026-02-06',
+                          ),
+                        ],
                       ),
-                    );
-                  },
+                      const SizedBox(height: 12),
+                      _LabeledField(
+                        label: 'Pattern',
+                        controller: _patternCtrl,
+                        hint: 'Enter a regex pattern',
+                        monospace: true,
+                        maxLines: 3,
+                      ),
+                      const SizedBox(height: 10),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          FilterChip(
+                            label: const Text('Case-sensitive'),
+                            selected: _caseSensitive,
+                            onSelected: (v) =>
+                                setState(() => _caseSensitive = v),
+                          ),
+                          FilterChip(
+                            label: const Text('Multiline'),
+                            selected: _multiLine,
+                            onSelected: (v) => setState(() => _multiLine = v),
+                          ),
+                          FilterChip(
+                            label: const Text('DotAll'),
+                            selected: _dotAll,
+                            onSelected: (v) => setState(() => _dotAll = v),
+                          ),
+                          FilterChip(
+                            label: const Text('Unicode'),
+                            selected: _unicode,
+                            onSelected: (v) => setState(() => _unicode = v),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      _LabeledField(
+                        label: 'Test input',
+                        controller: _testCtrl,
+                        hint: 'Paste text to test',
+                        maxLines: 6,
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          ElevatedButton.icon(
+                            onPressed: _run,
+                            icon: const Icon(Icons.play_arrow),
+                            label: const Text('Run'),
+                          ),
+                          const SizedBox(width: 12),
+                          if (_matches != null)
+                            Chip(
+                              avatar: const Icon(Icons.check),
+                              label: Text('${_matches!.length} match(es)'),
+                              backgroundColor: colorScheme.primaryContainer
+                                  .withValues(alpha: .35),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      if (_error != null)
+                        Text(
+                          _error!,
+                          style: TextStyle(color: colorScheme.error),
+                        ),
+                      if (_matches != null)
+                        Card(
+                          margin: const EdgeInsets.only(top: 8),
+                          child: Padding(
+                            padding: const EdgeInsets.all(12),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Highlighted',
+                                  style: Theme.of(context).textTheme.labelLarge,
+                                ),
+                                const SizedBox(height: 8),
+                                _HighlightedText(
+                                  text: _testCtrl.text,
+                                  matches: _matches!,
+                                  color: colorScheme.primary,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      if (_matches != null && _matches!.isNotEmpty)
+                        ..._matches!.asMap().entries.map((entry) {
+                          final index = entry.key;
+                          final m = entry.value;
+                          final groups = List.generate(
+                            m.groupCount + 1,
+                            (i) => m.group(i) ?? '',
+                          );
+                          return Card(
+                            margin: const EdgeInsets.symmetric(vertical: 6),
+                            child: ListTile(
+                              title: Text(
+                                'Match ${index + 1}: "${m.group(0)}"',
+                              ),
+                              subtitle: Text('Groups: ${groups.join(', ')}'),
+                            ),
+                          );
+                        }),
+                    ],
+                  ),
                 ),
-              ),
-          ],
+              );
+            },
+          ),
         ),
       ),
     );
   }
 
-  Widget _regexPresetButton(String pattern, String label) {
+  Widget _regexPresetButton(String pattern, String label, {String? sample}) {
     return OutlinedButton(
-      onPressed: () => setState(() => _patternCtrl.text = pattern),
+      onPressed: () => setState(() {
+        _patternCtrl.text = pattern;
+        if (sample != null) _testCtrl.text = sample;
+      }),
       child: Text(label),
     );
+  }
+}
+
+class _HighlightedText extends StatelessWidget {
+  const _HighlightedText({
+    required this.text,
+    required this.matches,
+    required this.color,
+  });
+
+  final String text;
+  final List<RegExpMatch> matches;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    if (matches.isEmpty) return Text(text);
+    final spans = <TextSpan>[];
+    var cursor = 0;
+    for (final m in matches) {
+      final start = m.start;
+      final end = m.end;
+      if (start > cursor) {
+        spans.add(TextSpan(text: text.substring(cursor, start)));
+      }
+      spans.add(
+        TextSpan(
+          text: text.substring(start, end),
+          style: TextStyle(
+            backgroundColor: color.withValues(alpha: .2),
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      );
+      cursor = end;
+    }
+    if (cursor < text.length) {
+      spans.add(TextSpan(text: text.substring(cursor)));
+    }
+    return SelectableText.rich(TextSpan(children: spans));
   }
 }
 
@@ -816,7 +936,9 @@ BigInt _ipv4ToInt(String ip) {
   if (parsed.length != 4 || parsed.any((o) => o < 0 || o > 255)) {
     throw 'Invalid IPv4 address';
   }
-  return BigInt.from(parsed[0] << 24 | parsed[1] << 16 | parsed[2] << 8 | parsed[3]);
+  return BigInt.from(
+    parsed[0] << 24 | parsed[1] << 16 | parsed[2] << 8 | parsed[3],
+  );
 }
 
 String _intToIpv4(BigInt value) {
@@ -833,8 +955,9 @@ class ConverterPage extends StatefulWidget {
 }
 
 class _ConverterPageState extends State<ConverterPage> {
-  final _inputCtrl =
-      TextEditingController(text: '{"hello": "world", "items": [1,2,3]}');
+  final _inputCtrl = TextEditingController(
+    text: '{"hello": "world", "items": [1,2,3]}',
+  );
   String _source = 'json';
   String? _error;
   String _jsonOut = '';
@@ -847,8 +970,9 @@ class _ConverterPageState extends State<ConverterPage> {
         final parsed = _parseInput(_inputCtrl.text, _source);
         _jsonOut = const JsonEncoder.withIndent('  ').convert(parsed);
         _yamlOut = json2yaml(parsed);
-        final mapForToml =
-            parsed is Map ? Map<String, Object?>.from(parsed) : {'root': parsed};
+        final mapForToml = parsed is Map
+            ? Map<String, Object?>.from(parsed)
+            : {'root': parsed};
         _tomlOut = TomlDocument.fromMap(mapForToml).toString();
         _error = null;
       } catch (e) {
@@ -996,7 +1120,11 @@ class _JwtToolsPageState extends State<JwtToolsPage> {
         : {'data': obj}; // wrap primitives for display
   }
 
-  String _verifyHs(List<String> parts, Map<String, dynamic> header, String secret) {
+  String _verifyHs(
+    List<String> parts,
+    Map<String, dynamic> header,
+    String secret,
+  ) {
     final alg = (header['alg'] ?? 'HS256') as String;
     Hmac? hmac;
     if (alg == 'HS256') hmac = Hmac(sha256, utf8.encode(secret));
@@ -1008,7 +1136,9 @@ class _JwtToolsPageState extends State<JwtToolsPage> {
     final digest = hmac.convert(utf8.encode(signingInput));
     final expectedSig = _base64UrlNoPad(digest.bytes);
     final providedSig = _normalizeSig(parts[2]);
-    return expectedSig == providedSig ? 'Signature verified ($alg)' : 'Invalid signature';
+    return expectedSig == providedSig
+        ? 'Signature verified ($alg)'
+        : 'Invalid signature';
   }
 
   String _base64UrlNoPad(List<int> bytes) =>
