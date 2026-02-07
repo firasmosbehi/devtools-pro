@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:ui' show FontFeature;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -95,7 +96,7 @@ class _HomeShellState extends State<HomeShell> {
           NavigationDestination(icon: Icon(Icons.lock_clock), label: 'JWT'),
         ],
         backgroundColor: colorScheme.surface,
-        indicatorColor: colorScheme.primary.withValues(alpha: .12),
+        indicatorColor: colorScheme.primary.withOpacity(.12),
       ),
     );
   }
@@ -157,7 +158,7 @@ class UtilitiesHomePage extends StatelessWidget {
                       vertical: 6,
                     ),
                     decoration: BoxDecoration(
-                      color: colorScheme.primary.withValues(alpha: 0.1),
+                      color: colorScheme.primary.withOpacity(0.1),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Row(
@@ -228,7 +229,7 @@ class _HeroCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: colorScheme.primary.withValues(alpha: .35),
+            color: colorScheme.primary.withOpacity(.35),
             blurRadius: 28,
             offset: const Offset(0, 14),
           ),
@@ -262,7 +263,7 @@ class _HeroCard extends StatelessWidget {
           Text(
             'Regexes, crons, CIDRs, converters, JWTs. Offline-first with shareable snippets.',
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: colorScheme.onPrimary.withValues(alpha: .9),
+              color: colorScheme.onPrimary.withOpacity(.9),
             ),
           ),
           const SizedBox(height: 14),
@@ -310,10 +311,10 @@ class _UtilityTile extends StatelessWidget {
       decoration: BoxDecoration(
         color: colorScheme.surface,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: colorScheme.outline.withValues(alpha: .2)),
+        border: Border.all(color: colorScheme.outline.withOpacity(.2)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: .04),
+            color: Colors.black.withOpacity(.04),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -603,8 +604,8 @@ class _RegexBuilderPageState extends State<RegexBuilderPage> {
                             Chip(
                               avatar: const Icon(Icons.check),
                               label: Text('${_matches!.length} match(es)'),
-                              backgroundColor: colorScheme.primaryContainer
-                                  .withValues(alpha: .35),
+                              backgroundColor:
+                                  colorScheme.primaryContainer.withOpacity(.35),
                             ),
                         ],
                       ),
@@ -766,7 +767,7 @@ class _HighlightedText extends StatelessWidget {
         TextSpan(
           text: text.substring(start, end),
           style: TextStyle(
-            backgroundColor: color.withValues(alpha: .2),
+            backgroundColor: color.withOpacity(.2),
             fontWeight: FontWeight.bold,
           ),
         ),
@@ -1122,7 +1123,7 @@ class _StatRow extends StatelessWidget {
             child: Text(
               value,
               style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                fontFeatures: const [FontFeature.tabularFigures()],
+                fontFeatures: [FontFeature.tabularFigures()],
               ),
             ),
           ),
@@ -1455,9 +1456,9 @@ class _Pill extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: colorScheme.onPrimary.withValues(alpha: .15),
+        color: colorScheme.onPrimary.withOpacity(.15),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: colorScheme.onPrimary.withValues(alpha: .25)),
+        border: Border.all(color: colorScheme.onPrimary.withOpacity(.25)),
       ),
       child: Text(
         text,
