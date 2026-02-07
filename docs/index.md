@@ -1,7 +1,8 @@
 # Conformité Play Store
 
 ## Définir les règles de confidentialité
-Ajoutez un lien vers votre politique de confidentialité publique. Hébergez-la sur votre domaine ou un document public et veillez à ce qu’elle couvre données collectées, usage, partage et suppression.
+Ajoutez un lien vers votre politique de confidentialité publique. Hébergez-la sur votre domaine ou un document public et veillez à ce qu’elle couvre données collectées, usage, partage et suppression.  
+➡️ Voir la page dédiée : [Politique de confidentialité](privacy.html)
 
 ## Accès aux applications
 Déclarez les comptes de test et les rôles nécessaires. Documentez l’authentification (OAuth, SSO, compte invité) et ajoutez des identifiants de démonstration si requis.
