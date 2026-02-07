@@ -1,0 +1,102 @@
+name: Android Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      track:
+        description: "Play Store track (internal|alpha|beta|production)"
+        required: false
+        default: internal
+      rollout:
+        description: "Staged rollout % (production only)"
+        required: false
+        default: "100"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.16.9'
+          cache: true
+
+      - name: Flutter pub get
+        run: flutter pub get
+
+      - name: Run tests
+        run: flutter test --coverage
+
+      - name: Build app bundle
+        run: flutter build appbundle --release
+
+      - name: Upload AAB artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-release-aab
+          path: build/app/outputs/bundle/release/app-release.aab
+
+  deploy:
+    needs: build
+    if: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON != '' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.16.9'
+          cache: true
+
+      - name: Download AAB from build job
+        uses: actions/download-artifact@v4
+        with:
+          name: app-release-aab
+          path: build/app/outputs/bundle/release
+
+      - name: Install fastlane supply (Play publishing)
+        run: sudo gem install fastlane -N
+
+      - name: Write service account json
+        run: |
+          mkdir -p android/play
+          echo "$PLAY_SERVICE_ACCOUNT_JSON" > android/play/service-account.json
+        env:
+          PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+
+      - name: Publish to Google Play
+        env:
+          SUPPLY_PACKAGE_NAME: com.devtoolspro.devtools_pro
+          SUPPLY_JSON_KEY: android/play/service-account.json
+          SUPPLY_AAB_FILE: build/app/outputs/bundle/release/app-release.aab
+          SUPPLY_TRACK: ${{ github.event.inputs.track || 'internal' }}
+          SUPPLY_ROLLOUT_PERCENTAGE: ${{ github.event.inputs.rollout }}
+        run: |
+          bundle exec fastlane supply \
+            --package_name $SUPPLY_PACKAGE_NAME \
+            --json_key $SUPPLY_JSON_KEY \
+            --aab $SUPPLY_AAB_FILE \
+            --track $SUPPLY_TRACK \
+            $( [ "$SUPPLY_TRACK" = "production" ] && echo "--rollout $SUPPLY_ROLLOUT_PERCENTAGE" )
+
+      - name: Cleanup service account
+        if: always()
+        run: rm -f android/play/service-account.json

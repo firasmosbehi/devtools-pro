@@ -4,16 +4,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
-import 'package:timezone/data/latest.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
 import 'package:cron_parser/cron_parser.dart' as cron;
 import 'package:toml/toml.dart';
 import 'package:yaml/yaml.dart';
 import 'package:json2yaml/json2yaml.dart';
 import 'package:crypto/crypto.dart';
+import 'cron_utils.dart';
 
 void main() {
-  tz.initializeTimeZones();
+  ensureTimeZonesInitialized();
   runApp(const DevToolsProApp());
 }
 
@@ -790,99 +790,175 @@ class CronDesignerPage extends StatefulWidget {
 
 class _CronDesignerPageState extends State<CronDesignerPage> {
   final _cronCtrl = TextEditingController(text: '0 12 * * 1-5');
-  final _zoneCtrl = TextEditingController(text: 'UTC');
+  ZoneChoice? _selectedZone;
   List<tz.TZDateTime> _nextRuns = [];
   String? _error;
+  bool _isLoading = false;
+  List<ZoneChoice> _zones = const [];
 
   @override
   void initState() {
     super.initState();
-    _compute();
+    _bootstrap();
   }
 
-  void _compute() {
+  Future<void> _bootstrap() async {
+    setState(() => _isLoading = true);
+    try {
+      _zones = buildZoneChoices();
+      _selectedZone = _zones.first;
+      await _compute();
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _compute() async {
     setState(() {
-      try {
-        final iterator = cron.Cron().parse(_cronCtrl.text, _zoneCtrl.text);
-        final now = tz.TZDateTime.now(tz.getLocation(_zoneCtrl.text));
-        final runs = <tz.TZDateTime>[];
-        var current = iterator.next();
-        while (runs.length < 5) {
-          if (current.isAfter(now)) runs.add(current);
-          current = iterator.next();
-        }
+      _error = null;
+      _nextRuns = [];
+    });
+    final zoneName = _selectedZone?.name ?? 'UTC';
+    try {
+      final result = _parseCron(_cronCtrl.text, zoneName);
+      final now = tz.TZDateTime.now(result.location);
+      final runs = <tz.TZDateTime>[];
+      var current = result.iterator.next();
+      while (runs.length < 5) {
+        if (current.isAfter(now)) runs.add(current);
+        current = result.iterator.next();
+      }
+      setState(() {
         _nextRuns = runs;
         _error = null;
-      } catch (e) {
+      });
+    } catch (e, stack) {
+      debugPrint('Cron compute failed: $e\n$stack');
+      setState(() {
         _error = 'Invalid cron: $e';
         _nextRuns = [];
-      }
-    });
+      });
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Cron Designer'),
+        title: const Text('Cron Studio'),
         actions: [
           IconButton(icon: const Icon(Icons.refresh), onPressed: _compute),
         ],
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _LabeledField(
-              label: 'Cron expression',
-              controller: _cronCtrl,
-              hint: '*/5 * * * *',
-              monospace: true,
-            ),
-            const SizedBox(height: 8),
-            _LabeledField(
-              label: 'Time zone (IANA)',
-              controller: _zoneCtrl,
-              hint: 'e.g. UTC, America/New_York',
-            ),
-            const SizedBox(height: 12),
-            ElevatedButton.icon(
-              onPressed: _compute,
-              icon: const Icon(Icons.calculate),
-              label: const Text('Preview next 5 runs'),
-            ),
-            const SizedBox(height: 12),
-            if (_error != null)
-              Text(
-                _error!,
-                style: TextStyle(color: Theme.of(context).colorScheme.error),
-              ),
-            if (_nextRuns.isNotEmpty)
-              Expanded(
-                child: ListView.builder(
-                  itemCount: _nextRuns.length,
-                  itemBuilder: (context, index) {
-                    final run = _nextRuns[index];
-                    final formatted = DateFormat.yMMMMd().add_jm().format(run);
-                    return Card(
-                      margin: const EdgeInsets.symmetric(vertical: 6),
-                      child: ListTile(
-                        leading: const Icon(Icons.schedule),
-                        title: Text(formatted),
-                        subtitle: Text(
-                          'In ${run.difference(DateTime.now()).inMinutes} minutes',
-                        ),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _LabeledField(
+                    label: 'Cron expression (5 fields)',
+                    controller: _cronCtrl,
+                    hint: '*/5 * * * *',
+                    monospace: true,
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    'Time zone',
+                    style: Theme.of(context).textTheme.labelLarge,
+                  ),
+                  const SizedBox(height: 6),
+                  DropdownButtonFormField<ZoneChoice>(
+                    value: _selectedZone,
+                    isExpanded: true,
+                    decoration: InputDecoration(
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
                       ),
-                    );
-                  },
-                ),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 12,
+                      ),
+                    ),
+                    items: _zones
+                        .map(
+                          (z) => DropdownMenuItem(
+                            value: z,
+                            child: Text(
+                              z.label,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (value) {
+                      setState(() => _selectedZone = value);
+                      _compute();
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  ElevatedButton.icon(
+                    onPressed: _compute,
+                    icon: const Icon(Icons.calculate),
+                    label: const Text('Preview next 5 runs'),
+                  ),
+                  const SizedBox(height: 12),
+                  if (_error != null)
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: colorScheme.errorContainer,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        _error!,
+                        style: TextStyle(color: colorScheme.onErrorContainer),
+                      ),
+                    ),
+                  if (_nextRuns.isNotEmpty)
+                    Expanded(
+                      child: ListView.builder(
+                        itemCount: _nextRuns.length,
+                        itemBuilder: (context, index) {
+                          final run = _nextRuns[index];
+                          final formatted = DateFormat.yMMMMd().add_jm().format(
+                            run,
+                          );
+                          return Card(
+                            margin: const EdgeInsets.symmetric(vertical: 6),
+                            child: ListTile(
+                              leading: const Icon(Icons.schedule),
+                              title: Text(formatted),
+                              subtitle: Text(
+                                'In ${run.difference(DateTime.now()).inMinutes} minutes',
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                ],
               ),
-          ],
-        ),
-      ),
+            ),
     );
   }
+}
+
+class _CronParseResult {
+  _CronParseResult({required this.iterator, required this.location});
+
+  final cron.CronIterator<tz.TZDateTime> iterator;
+  final tz.Location location;
+}
+
+_CronParseResult _parseCron(String expr, String rawZone) {
+  final canonicalName = canonicalZoneName(rawZone);
+  final location = resolveZone(canonicalName);
+  final iterator = cron.Cron().parse(expr, location.name);
+  return _CronParseResult(iterator: iterator, location: location);
 }
 
 class ComingSoonPage extends StatelessWidget {
