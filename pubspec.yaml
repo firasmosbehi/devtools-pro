@@ -36,7 +36,7 @@ dependencies:
   cupertino_icons: ^1.0.8
   google_fonts: ^6.2.1
   cron_parser: ^0.5.0
-  intl: ^0.20.2
+  intl: 0.19.0
   timezone: ^0.7.0
   yaml: 3.1.2
   toml: 0.15.0
